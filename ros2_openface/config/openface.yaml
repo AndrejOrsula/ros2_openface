@@ -1,0 +1,18 @@
+openface:
+  ros__parameters:
+    enable_face_features: true
+    enable_head_pose: true
+
+    enable_eye_features: true
+    enable_gaze: true
+
+    enable_action_units: true
+
+    enable_aligned_face: true # Only for visualisation
+    enable_hog: true # Only for visualisation
+
+    broadcast_tf: true
+    visualise: true
+    track_fps: true
+
+    use_sim_time: false
