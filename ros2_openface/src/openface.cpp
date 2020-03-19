@@ -94,10 +94,10 @@ Ros2OpenFace::Ros2OpenFace() : Node(NODE_NAME),
   sub_camera_ = image_transport::create_camera_subscription(this, "camera/image_raw", image_transport::CameraSubscriber::Callback(std::bind(&Ros2OpenFace::image_callback, this, _1, _2)), "raw", rmw_qos_profile_sensor_data);
 
   // Declaration of the available parameters
-  this->declare_parameter<bool>("enable_face_features", true);
+  this->declare_parameter<std::vector<bool>>("enable_face_features", std::vector<bool>(3, true)); // 2D landmarks, 2D visible landmarks, 3D landmarks
   this->declare_parameter<bool>("enable_head_pose", true);
 
-  this->declare_parameter<bool>("enable_eye_features", true);
+  this->declare_parameter<std::vector<bool>>("enable_eye_features", std::vector<bool>(3, true)); // 2D landmarks, 2D visible landmarks, 3D landmarks
   this->declare_parameter<bool>("enable_gaze", true);
 
   this->declare_parameter<bool>("enable_action_units", true);
@@ -110,7 +110,7 @@ Ros2OpenFace::Ros2OpenFace() : Node(NODE_NAME),
 
   // Create a publisher for information obtained from OpenFace
   rclcpp::QoS qos = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
-  pub_face_stamped_ = this->create_publisher<openface_msgs::msg::FaceStamped>(NODE_NAME + "/faces", qos);
+  pub_face_stamped_ = this->create_publisher<openface_msgs::msg::FaceStamped>(NODE_NAME + "/face", qos);
 
   // Initialise OpenFace specifics
   initialise_openface();
@@ -261,10 +261,10 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
     }
 
     // Extract facial landmarks and copy to the message, if desired
-    if (this->get_parameter("enable_face_features").get_value<bool>())
+    auto enable_face_features = this->get_parameter("enable_face_features").get_value<std::vector<bool>>();
+    if (enable_face_features[0]) // 2D landmarks
     {
       std::vector<cv::Point2f> landmarks = LandmarkDetector::CalculateAllLandmarks(face_landmark_detector_);
-      std::vector<cv::Point2f> landmarks_visible = LandmarkDetector::CalculateVisibleLandmarks(face_landmark_detector_);
 
       for (auto landmark : landmarks)
       {
@@ -273,7 +273,10 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
         landmark_px.y = landmark.y;
         face.face.landmarks.push_back(landmark_px);
       }
-
+    }
+    if (enable_face_features[1]) // 2D visible landmarks
+    {
+      std::vector<cv::Point2f> landmarks_visible = LandmarkDetector::CalculateVisibleLandmarks(face_landmark_detector_);
       for (auto landmark : landmarks_visible)
       {
         openface_msgs::msg::Pixel landmark_px;
@@ -281,7 +284,9 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
         landmark_px.y = landmark.y;
         face.face.landmarks_visible.push_back(landmark_px);
       }
-
+    }
+    if (enable_face_features[2]) // 3D landmarks
+    {
       cv::Mat_<double> shape_3d = face_landmark_detector_.GetShape(fx, fy, cx, cy);
       for (auto i = 0; i < face_landmark_detector_.pdm.NumberOfPoints(); ++i)
       {
@@ -331,11 +336,11 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
     {
       // Compute eye landmarks
       std::vector<cv::Point2f> eye_landmarks = LandmarkDetector::CalculateAllEyeLandmarks(face_landmark_detector_);
-      std::vector<cv::Point2f> eye_landmarks_visible = LandmarkDetector::CalculateVisibleEyeLandmarks(face_landmark_detector_);
       std::vector<cv::Point3f> eye_landmarks_3d = LandmarkDetector::Calculate3DEyeLandmarks(face_landmark_detector_, fx, fy, cx, cy);
 
       // Add eye features to the message, if desired
-      if (this->get_parameter("enable_eye_features").get_value<bool>())
+      auto enable_eye_features = this->get_parameter("enable_eye_features").get_value<std::vector<bool>>();
+      if (enable_eye_features[0]) // 2D landmarks
       {
         for (auto landmark : eye_landmarks)
         {
@@ -344,7 +349,10 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
           landmark_px.y = landmark.y;
           face.face.eye_landmarks.push_back(landmark_px);
         }
-
+      }
+      if (enable_eye_features[1]) // 2D visible landmarks
+      {
+        std::vector<cv::Point2f> eye_landmarks_visible = LandmarkDetector::CalculateVisibleEyeLandmarks(face_landmark_detector_);
         for (auto landmark : eye_landmarks_visible)
         {
           openface_msgs::msg::Pixel landmark_px;
@@ -352,7 +360,9 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
           landmark_px.y = landmark.y;
           face.face.eye_landmarks_visible.push_back(landmark_px);
         }
-
+      }
+      if (enable_eye_features[2]) // 3D landmarks
+      {
         for (auto landmark : eye_landmarks_3d)
         {
           geometry_msgs::msg::Point landmark_3d;

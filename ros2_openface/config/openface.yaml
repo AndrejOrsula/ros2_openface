@@ -1,16 +1,21 @@
 openface:
   ros__parameters:
-    enable_face_features: true
+    enable_face_features:
+      - true # 2D features
+      - true # 2D visible features
+      - true # 3D features
     enable_head_pose: true
 
-    enable_eye_features: true
+    enable_eye_features:
+      - true # 2D features
+      - true # 2D visible features
+      - true # 3D features
     enable_gaze: true
 
     enable_action_units: true
-
     enable_aligned_face: true # Only for visualisation
     enable_hog: true # Only for visualisation
-
+    
     broadcast_tf: true
     visualise: true
     track_fps: true

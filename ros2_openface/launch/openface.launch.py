@@ -31,6 +31,6 @@ def generate_launch_description():
             parameters=[config_openface],
             remappings=[('camera/image_raw', 'camera/color/image_raw'),
                         ('camera/camera_info', 'camera/color/camera_info'),
-                        ('openface/faces', 'faces')],
+                        ('openface/face', 'face')],
         ),
     ])
