@@ -306,7 +306,6 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
     // Get head pose, if desired
     if (this->get_parameter("enable_head_pose").get_value<bool>())
     {
-      // Estimate head pose and eye gaze
       cv::Vec6d head_pose = LandmarkDetector::GetPose(face_landmark_detector_, fx, fy, cx, cy);
       face.face.head_pose.position.x = head_pose[0] / 1000.0;
       face.face.head_pose.position.y = head_pose[1] / 1000.0;
@@ -332,14 +331,14 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
     }
 
     // Get gaze and/or eye features, if desired
-    if (this->get_parameter("enable_gaze").get_value<bool>() || this->get_parameter("enable_eye_features").get_value<bool>())
+    auto enable_eye_features = this->get_parameter("enable_eye_features").get_value<std::vector<bool>>();
+    if (this->get_parameter("enable_gaze").get_value<bool>() || enable_eye_features[0] || enable_eye_features[1] || enable_eye_features[2])
     {
       // Compute eye landmarks
       std::vector<cv::Point2f> eye_landmarks = LandmarkDetector::CalculateAllEyeLandmarks(face_landmark_detector_);
       std::vector<cv::Point3f> eye_landmarks_3d = LandmarkDetector::Calculate3DEyeLandmarks(face_landmark_detector_, fx, fy, cx, cy);
 
       // Add eye features to the message, if desired
-      auto enable_eye_features = this->get_parameter("enable_eye_features").get_value<std::vector<bool>>();
       if (enable_eye_features[0]) // 2D landmarks
       {
         for (auto landmark : eye_landmarks)
@@ -535,7 +534,7 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
 /// MAIN ///
 ////////////
 
-/// Main function that initiates an object of `Rcos2OpenFace` class as the core of this node.
+/// Main function that initiates an object of `Ros2OpenFace` class as the core of this node.
 int main(int argc, char *argv[])
 {
   rclcpp::init(argc, argv);

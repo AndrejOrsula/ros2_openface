@@ -15,7 +15,7 @@ openface:
     enable_action_units: true
     enable_aligned_face: true # Only for visualisation
     enable_hog: true # Only for visualisation
-    
+
     broadcast_tf: true
     visualise: true
     track_fps: true
