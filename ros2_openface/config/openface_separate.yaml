@@ -1,0 +1,23 @@
+openface_separate:
+  ros__parameters:
+    enable_face_features:
+      - false # 2D features
+      - true # 2D visible features
+      - false # 3D features
+    enable_head_pose: true
+
+    enable_eye_features:
+      - false # 2D features
+      - false # 2D visible features
+      - false # 3D features
+    enable_gaze: false
+
+    enable_action_units: false
+    enable_aligned_face: false # Only for visualisation
+    enable_hog: false # Only for visualisation
+
+    broadcast_tf: false
+    visualise: false
+    track_fps: false
+
+    use_sim_time: false

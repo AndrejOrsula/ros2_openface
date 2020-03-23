@@ -94,8 +94,33 @@ ament_target_dependencies(${EXECUTABLE_0}
   tf2
   tf2_ros
 )
+
+set(EXECUTABLE_1 openface_separate)
+add_executable(${EXECUTABLE_1} src/${EXECUTABLE_1}.cpp)
+
+# Executable 0
+target_link_libraries(${EXECUTABLE_1}
+  ${OPENFACE_LIBS}
+  openblas
+  dlib
+  ${Boost_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+)
+ament_target_dependencies(${EXECUTABLE_1}
+  rclcpp
+  std_msgs
+  geometry_msgs
+  sensor_msgs
+  openface_msgs
+  image_transport
+  cv_bridge
+  tf2
+  tf2_ros
+)
+
+
 install(TARGETS
-  ${EXECUTABLE_0}
+  ${EXECUTABLE_0} ${EXECUTABLE_1}
   DESTINATION lib/${PROJECT_NAME}/
 )
 

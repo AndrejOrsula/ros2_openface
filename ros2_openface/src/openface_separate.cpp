@@ -1,4 +1,4 @@
-/// ROS 2 wrapper for OpenFace for one face, publishing output as a single topic
+/// ROS 2 wrapper for OpenFace for one face, publishing output under separate topics
 
 ////////////////////
 /// DEPENDENCIES ///
@@ -15,7 +15,12 @@
 // ROS 2 interfaces
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
-#include <openface_msgs/msg/face_stamped.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/vector3_stamped.hpp>
+#include <openface_msgs/msg/pixels_stamped.hpp>
+#include <openface_msgs/msg/points_stamped.hpp>
+#include <openface_msgs/msg/action_units_stamped.hpp>
 
 // OpenCV
 #include <opencv2/highgui/highgui.hpp>
@@ -53,17 +58,37 @@ const std::string TF_FRAME_EYE_RIGHT = "eye_right";
 //////////////////
 
 /// Class representation of this node
-class Ros2OpenFace : public rclcpp::Node
+class Ros2OpenFaceSeparate : public rclcpp::Node
 {
 public:
   /// Constructor
-  Ros2OpenFace();
+  Ros2OpenFaceSeparate();
 
 private:
   /// Subscriber to the camera, using image_transport
   image_transport::CameraSubscriber sub_camera_;
-  /// Publisher of the OpenFace information
-  rclcpp::Publisher<openface_msgs::msg::FaceStamped>::SharedPtr pub_face_;
+  /// Publisher of the OpenFace landmarks
+  rclcpp::Publisher<openface_msgs::msg::PixelsStamped>::SharedPtr pub_landmarks_;
+  /// Publisher of the OpenFace visible landmarks
+  rclcpp::Publisher<openface_msgs::msg::PixelsStamped>::SharedPtr pub_landmarks_visible_;
+  /// Publisher of the OpenFace 3D landmarks
+  rclcpp::Publisher<openface_msgs::msg::PointsStamped>::SharedPtr pub_landmarks_3d_;
+  /// Publisher of the OpenFace head pose
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_head_pose_;
+  /// Publisher of the OpenFace eye landmarks
+  rclcpp::Publisher<openface_msgs::msg::PixelsStamped>::SharedPtr pub_eye_landmarks_;
+  /// Publisher of the OpenFace visible eye landmarks
+  rclcpp::Publisher<openface_msgs::msg::PixelsStamped>::SharedPtr pub_eye_landmarks_visible_;
+  /// Publisher of the OpenFace 3D eye landmarks
+  rclcpp::Publisher<openface_msgs::msg::PointsStamped>::SharedPtr pub_eye_landmarks_3d_;
+  /// Publisher of the OpenFace left gaze
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_gaze_left_;
+  /// Publisher of the OpenFace right gaze
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_gaze_right_;
+  /// Publisher of the OpenFace right gaze
+  rclcpp::Publisher<geometry_msgs::msg::Vector3Stamped>::SharedPtr pub_gaze_compound_;
+  /// Publisher of the OpenFace Action Units
+  rclcpp::Publisher<openface_msgs::msg::ActionUnitsStamped>::SharedPtr pub_action_units_;
   /// Broadcaster of the TF frames acquired by OpenFace
   tf2_ros::TransformBroadcaster tf2_broadcaster_;
   /// Parameters for the OpenFace face model
@@ -83,15 +108,15 @@ private:
   void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr &img, const sensor_msgs::msg::CameraInfo::ConstSharedPtr &cam);
 };
 
-Ros2OpenFace::Ros2OpenFace() : Node(NODE_NAME),
-                               tf2_broadcaster_(this),
-                               face_analyser_([]() -> FaceAnalysis::FaceAnalyser { FaceAnalysis::FaceAnalyserParameters face_analysis_params; 
+Ros2OpenFaceSeparate::Ros2OpenFaceSeparate() : Node(NODE_NAME),
+                                               tf2_broadcaster_(this),
+                                               face_analyser_([]() -> FaceAnalysis::FaceAnalyser { FaceAnalysis::FaceAnalyserParameters face_analysis_params; 
                                face_analysis_params.OptimizeForImages();
                                return  FaceAnalysis::FaceAnalyser(face_analysis_params); }()),
-                               visualiser_(true, true, true, true)
+                                               visualiser_(true, true, true, true)
 {
   // Create a subscriber to camera that provides frames for processing
-  sub_camera_ = image_transport::create_camera_subscription(this, "camera/image_raw", image_transport::CameraSubscriber::Callback(std::bind(&Ros2OpenFace::image_callback, this, _1, _2)), "raw", rmw_qos_profile_sensor_data);
+  sub_camera_ = image_transport::create_camera_subscription(this, "camera/image_raw", image_transport::CameraSubscriber::Callback(std::bind(&Ros2OpenFaceSeparate::image_callback, this, _1, _2)), "raw", rmw_qos_profile_sensor_data);
 
   // Declaration of the available parameters
   this->declare_parameter<std::vector<bool>>("enable_face_features", std::vector<bool>(3, true)); // 2D landmarks, 2D visible landmarks, 3D landmarks
@@ -108,9 +133,55 @@ Ros2OpenFace::Ros2OpenFace() : Node(NODE_NAME),
   this->declare_parameter<bool>("visualise", true);
   this->declare_parameter<bool>("track_fps", true);
 
-  // Create a publisher for information obtained from OpenFace
+  // TODO: Implement run-time setting of parameters
+
+  // Create publishers for information obtained from OpenFace
   rclcpp::QoS qos = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_default));
-  pub_face_ = this->create_publisher<openface_msgs::msg::FaceStamped>(NODE_NAME + "/face", qos);
+
+  auto enable_face_features = this->get_parameter("enable_face_features").get_value<std::vector<bool>>();
+  if (enable_face_features[0])
+  {
+    pub_landmarks_ = this->create_publisher<openface_msgs::msg::PixelsStamped>(NODE_NAME + "/landmarks", qos);
+  }
+  if (enable_face_features[1])
+  {
+    pub_landmarks_visible_ = this->create_publisher<openface_msgs::msg::PixelsStamped>(NODE_NAME + "/landmarks_visible", qos);
+  }
+  if (enable_face_features[2])
+  {
+    pub_landmarks_3d_ = this->create_publisher<openface_msgs::msg::PointsStamped>(NODE_NAME + "/landmarks_3d", qos);
+  }
+
+  if (this->get_parameter("enable_head_pose").get_value<bool>())
+  {
+    pub_head_pose_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(NODE_NAME + "/head_pose", qos);
+  }
+
+  auto enable_eye_features = this->get_parameter("enable_eye_features").get_value<std::vector<bool>>();
+  if (enable_eye_features[0])
+  {
+    pub_eye_landmarks_ = this->create_publisher<openface_msgs::msg::PixelsStamped>(NODE_NAME + "/eye_landmarks", qos);
+  }
+  if (enable_eye_features[1])
+  {
+    pub_eye_landmarks_visible_ = this->create_publisher<openface_msgs::msg::PixelsStamped>(NODE_NAME + "/eye_landmarks_visible", qos);
+  }
+  if (enable_eye_features[2])
+  {
+    pub_eye_landmarks_3d_ = this->create_publisher<openface_msgs::msg::PointsStamped>(NODE_NAME + "/eye_landmarks_3d", qos);
+  }
+
+  if (this->get_parameter("enable_gaze").get_value<bool>())
+  {
+    pub_gaze_left_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(NODE_NAME + "/gaze_left", qos);
+    pub_gaze_right_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(NODE_NAME + "/gaze_right", qos);
+    pub_gaze_compound_ = this->create_publisher<geometry_msgs::msg::Vector3Stamped>(NODE_NAME + "/gaze_compound", qos);
+  }
+
+  if (this->get_parameter("enable_action_units").get_value<bool>())
+  {
+    pub_action_units_ = this->create_publisher<openface_msgs::msg::ActionUnitsStamped>(NODE_NAME + "/action_units", qos);
+  }
 
   // Initialise OpenFace specifics
   initialise_openface();
@@ -118,7 +189,7 @@ Ros2OpenFace::Ros2OpenFace() : Node(NODE_NAME),
   RCLCPP_INFO(this->get_logger(), "Node initialised");
 }
 
-void Ros2OpenFace::initialise_openface()
+void Ros2OpenFaceSeparate::initialise_openface()
 {
   face_landmark_detector_ = LandmarkDetector::CLNF(det_parameters_.model_location);
   if (!face_landmark_detector_.loaded_successfully)
@@ -161,14 +232,9 @@ void Ros2OpenFace::initialise_openface()
   }
 }
 
-void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr &img, const sensor_msgs::msg::CameraInfo::ConstSharedPtr &cam)
+void Ros2OpenFaceSeparate::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr &img, const sensor_msgs::msg::CameraInfo::ConstSharedPtr &cam)
 {
   RCLCPP_DEBUG(this->get_logger(), "Received frame for processing");
-
-  // Create a message that will be published once processing is finished
-  openface_msgs::msg::FaceStamped face;
-  // Use identical header as the processes image
-  face.header = img->header;
 
   // Use cv_bridge to convert sensor_msgs::msg::Image to cv::Mat
   cv_bridge::CvImagePtr cv_img_bgr8, cv_img_gray8;
@@ -264,29 +330,41 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
     auto enable_face_features = this->get_parameter("enable_face_features").get_value<std::vector<bool>>();
     if (enable_face_features[0]) // 2D landmarks
     {
-      std::vector<cv::Point2f> landmarks = LandmarkDetector::CalculateAllLandmarks(face_landmark_detector_);
+      openface_msgs::msg::PixelsStamped msg_landmarks;
+      msg_landmarks.header = img->header;
 
+      std::vector<cv::Point2f> landmarks = LandmarkDetector::CalculateAllLandmarks(face_landmark_detector_);
       for (auto landmark : landmarks)
       {
         openface_msgs::msg::Pixel landmark_px;
         landmark_px.x = landmark.x;
         landmark_px.y = landmark.y;
-        face.face.landmarks.push_back(landmark_px);
+        msg_landmarks.pixels.push_back(landmark_px);
       }
+
+      pub_landmarks_->publish(msg_landmarks);
     }
     if (enable_face_features[1]) // 2D visible landmarks
     {
+      openface_msgs::msg::PixelsStamped msg_landmarks_visible;
+      msg_landmarks_visible.header = img->header;
+
       std::vector<cv::Point2f> landmarks_visible = LandmarkDetector::CalculateVisibleLandmarks(face_landmark_detector_);
       for (auto landmark : landmarks_visible)
       {
         openface_msgs::msg::Pixel landmark_px;
         landmark_px.x = landmark.x;
         landmark_px.y = landmark.y;
-        face.face.landmarks_visible.push_back(landmark_px);
+        msg_landmarks_visible.pixels.push_back(landmark_px);
       }
+
+      pub_landmarks_visible_->publish(msg_landmarks_visible);
     }
     if (enable_face_features[2]) // 3D landmarks
     {
+      openface_msgs::msg::PointsStamped msg_landmarks_3d;
+      msg_landmarks_3d.header = img->header;
+
       cv::Mat_<double> shape_3d = face_landmark_detector_.GetShape(fx, fy, cx, cy);
       for (auto i = 0; i < face_landmark_detector_.pdm.NumberOfPoints(); ++i)
       {
@@ -294,8 +372,10 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
         landmark_3d.x = shape_3d.at<double>(i) / 1000.0;
         landmark_3d.y = shape_3d.at<double>(face_landmark_detector_.pdm.NumberOfPoints() + i) / 1000.0;
         landmark_3d.z = shape_3d.at<double>(face_landmark_detector_.pdm.NumberOfPoints() * 2 + i) / 1000.0;
-        face.face.landmarks_3d.push_back(landmark_3d);
+        msg_landmarks_3d.points.push_back(landmark_3d);
       }
+
+      pub_landmarks_3d_->publish(msg_landmarks_3d);
     }
 
     if (this->get_parameter("visualise").get_value<bool>())
@@ -306,21 +386,26 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
     // Get head pose, if desired
     if (this->get_parameter("enable_head_pose").get_value<bool>())
     {
+      geometry_msgs::msg::PoseStamped msg_head_pose;
+      msg_head_pose.header = img->header;
+
       cv::Vec6d head_pose = LandmarkDetector::GetPose(face_landmark_detector_, fx, fy, cx, cy);
-      face.face.head_pose.position.x = head_pose[0] / 1000.0;
-      face.face.head_pose.position.y = head_pose[1] / 1000.0;
-      face.face.head_pose.position.z = head_pose[2] / 1000.0;
+      msg_head_pose.pose.position.x = head_pose[0] / 1000.0;
+      msg_head_pose.pose.position.y = head_pose[1] / 1000.0;
+      msg_head_pose.pose.position.z = head_pose[2] / 1000.0;
       tf2::Quaternion head_orientation;
       head_orientation.setRPY(-head_pose[3], head_pose[4] + M_PI, -head_pose[5]);
-      face.face.head_pose.orientation = tf2::toMsg(head_orientation);
+      msg_head_pose.pose.orientation = tf2::toMsg(head_orientation);
+
+      pub_head_pose_->publish(msg_head_pose);
 
       if (this->get_parameter("broadcast_tf").get_value<bool>())
       {
         transform.child_frame_id = TF_FRAME_HEAD;
-        transform.transform.translation.x = face.face.head_pose.position.x;
-        transform.transform.translation.y = face.face.head_pose.position.y;
-        transform.transform.translation.z = face.face.head_pose.position.z;
-        transform.transform.rotation = face.face.head_pose.orientation;
+        transform.transform.translation.x = msg_head_pose.pose.position.x;
+        transform.transform.translation.y = msg_head_pose.pose.position.y;
+        transform.transform.translation.z = msg_head_pose.pose.position.z;
+        transform.transform.rotation = msg_head_pose.pose.orientation;
         tf2_broadcaster_.sendTransform(transform);
       }
 
@@ -341,40 +426,61 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
       // Add eye features to the message, if desired
       if (enable_eye_features[0]) // 2D landmarks
       {
+        openface_msgs::msg::PixelsStamped msg_eye_landmarks;
+        msg_eye_landmarks.header = img->header;
+
         for (auto landmark : eye_landmarks)
         {
           openface_msgs::msg::Pixel landmark_px;
           landmark_px.x = landmark.x;
           landmark_px.y = landmark.y;
-          face.face.eye_landmarks.push_back(landmark_px);
+          msg_eye_landmarks.pixels.push_back(landmark_px);
         }
+
+        pub_eye_landmarks_->publish(msg_eye_landmarks);
       }
       if (enable_eye_features[1]) // 2D visible landmarks
       {
+        openface_msgs::msg::PixelsStamped msg_eye_landmarks_visible;
+        msg_eye_landmarks_visible.header = img->header;
+
         std::vector<cv::Point2f> eye_landmarks_visible = LandmarkDetector::CalculateVisibleEyeLandmarks(face_landmark_detector_);
         for (auto landmark : eye_landmarks_visible)
         {
           openface_msgs::msg::Pixel landmark_px;
           landmark_px.x = landmark.x;
           landmark_px.y = landmark.y;
-          face.face.eye_landmarks_visible.push_back(landmark_px);
+          msg_eye_landmarks_visible.pixels.push_back(landmark_px);
         }
+
+        pub_eye_landmarks_visible_->publish(msg_eye_landmarks_visible);
       }
       if (enable_eye_features[2]) // 3D landmarks
       {
+        openface_msgs::msg::PointsStamped msg_eye_landmarks_3d;
+        msg_eye_landmarks_3d.header = img->header;
+
         for (auto landmark : eye_landmarks_3d)
         {
           geometry_msgs::msg::Point landmark_3d;
           landmark_3d.x = landmark.x / 1000.0;
           landmark_3d.y = landmark.y / 1000.0;
           landmark_3d.z = landmark.z / 1000.0;
-          face.face.eye_landmarks_3d.push_back(landmark_3d);
+          msg_eye_landmarks_3d.points.push_back(landmark_3d);
         }
+
+        pub_landmarks_3d_->publish(msg_eye_landmarks_3d);
       }
 
       // Get gaze, if desired
       if (this->get_parameter("enable_gaze").get_value<bool>())
       {
+        geometry_msgs::msg::PoseStamped msg_gaze_left, msg_gaze_right;
+        geometry_msgs::msg::Vector3Stamped msg_gaze_compound;
+        msg_gaze_left.header = img->header;
+        msg_gaze_right.header = img->header;
+        msg_gaze_compound.header = img->header;
+
         // Left pupil centre (position)
         cv::Point3f pupil_left(0, 0, 0);
         for (size_t i = 48; i < 56; ++i)
@@ -382,9 +488,9 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
           pupil_left += eye_landmarks_3d[i];
         }
         pupil_left /= 8000; // Average and conversion to metres
-        face.face.gaze_left.position.x = pupil_left.x;
-        face.face.gaze_left.position.y = pupil_left.y;
-        face.face.gaze_left.position.z = pupil_left.z;
+        msg_gaze_left.pose.position.x = pupil_left.x;
+        msg_gaze_left.pose.position.y = pupil_left.y;
+        msg_gaze_left.pose.position.z = pupil_left.z;
 
         // Right pupil centre (position)
         cv::Point3f pupil_right(0, 0, 0);
@@ -393,9 +499,9 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
           pupil_right += eye_landmarks_3d[i];
         }
         pupil_right /= 8000; // Average and conversion to metres
-        face.face.gaze_right.position.x = pupil_right.x;
-        face.face.gaze_right.position.y = pupil_right.y;
-        face.face.gaze_right.position.z = pupil_right.z;
+        msg_gaze_right.pose.position.x = pupil_right.x;
+        msg_gaze_right.pose.position.y = pupil_right.y;
+        msg_gaze_right.pose.position.z = pupil_right.z;
 
         // Quat for flipping the eye gaze
         tf2::Quaternion q;
@@ -407,7 +513,7 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
         tf2::Quaternion gaze_left_orientation;
         gaze_left_orientation.setValue(gaze_left.x, gaze_left.y, gaze_left.z);
         gaze_left_orientation *= q;
-        face.face.gaze_left.orientation = tf2::toMsg(gaze_left_orientation);
+        msg_gaze_left.pose.orientation = tf2::toMsg(gaze_left_orientation);
 
         // Right eye gaze orientation
         cv::Point3f gaze_right(0, 0, -1);
@@ -415,28 +521,32 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
         tf2::Quaternion gaze_right_orientation;
         gaze_right_orientation.setValue(gaze_right.x, gaze_right.y, gaze_right.z);
         gaze_right_orientation *= q;
-        face.face.gaze_right.orientation = tf2::toMsg(gaze_right_orientation);
+        msg_gaze_right.pose.orientation = tf2::toMsg(gaze_right_orientation);
 
         // Compund gaze orientation (average between left and right eye)
         cv::Vec2f gaze_compound = GazeAnalysis::GetGazeAngle(gaze_left, gaze_right);
-        face.face.gaze_compound.x = gaze_compound[0];
-        face.face.gaze_compound.y = gaze_compound[1];
-        face.face.gaze_compound.z = 0;
+        msg_gaze_compound.vector.x = gaze_compound[0];
+        msg_gaze_compound.vector.y = gaze_compound[1];
+        msg_gaze_compound.vector.z = 0;
+
+        pub_gaze_left_->publish(msg_gaze_left);
+        pub_gaze_right_->publish(msg_gaze_right);
+        pub_gaze_compound_->publish(msg_gaze_compound);
 
         if (this->get_parameter("broadcast_tf").get_value<bool>())
         {
           transform.child_frame_id = TF_FRAME_EYE_LEFT;
-          transform.transform.translation.x = face.face.gaze_left.position.x;
-          transform.transform.translation.y = face.face.gaze_left.position.y;
-          transform.transform.translation.z = face.face.gaze_left.position.z;
-          transform.transform.rotation = face.face.gaze_left.orientation;
+          transform.transform.translation.x = msg_gaze_left.pose.position.x;
+          transform.transform.translation.y = msg_gaze_left.pose.position.y;
+          transform.transform.translation.z = msg_gaze_left.pose.position.z;
+          transform.transform.rotation = msg_gaze_left.pose.orientation;
           tf2_broadcaster_.sendTransform(transform);
 
           transform.child_frame_id = TF_FRAME_EYE_RIGHT;
-          transform.transform.translation.x = face.face.gaze_right.position.x;
-          transform.transform.translation.y = face.face.gaze_right.position.y;
-          transform.transform.translation.z = face.face.gaze_right.position.z;
-          transform.transform.rotation = face.face.gaze_right.orientation;
+          transform.transform.translation.x = msg_gaze_right.pose.position.x;
+          transform.transform.translation.y = msg_gaze_right.pose.position.y;
+          transform.transform.translation.z = msg_gaze_right.pose.position.z;
+          transform.transform.rotation = msg_gaze_right.pose.orientation;
           tf2_broadcaster_.sendTransform(transform);
         }
 
@@ -450,6 +560,9 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
     // Get Action Units, if desired
     if (this->get_parameter("enable_action_units").get_value<bool>())
     {
+      openface_msgs::msg::ActionUnitsStamped msg_action_units;
+      msg_action_units.header = img->header;
+
       face_analyser_.PredictStaticAUsAndComputeFeatures(cv_img_bgr8->image, face_landmark_detector_.detected_landmarks);
       auto aus_reg = face_analyser_.GetCurrentAUsReg();
       auto aus_class = face_analyser_.GetCurrentAUsClass();
@@ -485,17 +598,16 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
 
       for (const auto &au : aus)
       {
-        face.face.action_units.push_back(std::get<1>(au));
+        msg_action_units.action_units.push_back(std::get<1>(au));
       }
+
+      pub_action_units_->publish(msg_action_units);
 
       if (this->get_parameter("visualise").get_value<bool>())
       {
         visualiser_.SetObservationActionUnits(aus_reg, aus_class);
       }
     }
-
-    // Publish the face
-    pub_face_->publish(face);
   }
 
   // Aligned face - Only for visualisation
@@ -542,11 +654,11 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
 /// MAIN ///
 ////////////
 
-/// Main function that initiates an object of `Ros2OpenFace` class as the core of this node.
+/// Main function that initiates an object of `Ros2OpenFaceSeparate` class as the core of this node.
 int main(int argc, char *argv[])
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<Ros2OpenFace>());
+  rclcpp::spin(std::make_shared<Ros2OpenFaceSeparate>());
   rclcpp::shutdown();
   return EXIT_SUCCESS;
 }

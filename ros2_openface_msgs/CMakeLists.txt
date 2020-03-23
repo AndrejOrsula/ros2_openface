@@ -33,9 +33,12 @@ find_package(geometry_msgs REQUIRED)
 # Interfaces
 set(MSG_FILES
   "msg/ActionUnit.msg"
+  "msg/ActionUnitsStamped.msg"
   "msg/Face.msg"
   "msg/FaceStamped.msg"
   "msg/Pixel.msg"
+  "msg/PixelsStamped.msg"
+  "msg/PointsStamped.msg"
 )
 set(SRV_FILES
 
