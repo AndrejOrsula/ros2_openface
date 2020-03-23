@@ -9,29 +9,18 @@
   <license>BSD</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>image_transport</depend>
+  <depend>cv_bridge</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>openface_msgs</depend>
+
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
-
-  <build_depend>rclcpp</build_depend>
-  <exec_depend>rclcpp</exec_depend>
-
-  <build_depend>image_transport</build_depend>
-  <exec_depend>image_transport</exec_depend>
-
-  <build_depend>cv_bridge</build_depend>
-  <exec_depend>cv_bridge</exec_depend>
-
-  <build_depend>tf2</build_depend>
-  <exec_depend>tf2</exec_depend>
-
-  <build_depend>tf2_ros</build_depend>
-  <exec_depend>tf2_ros</exec_depend>
-
-  <build_depend>sensor_msgs</build_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-
-  <build_depend>openface_msgs</build_depend>
-  <exec_depend>openface_msgs</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
