@@ -1,4 +1,4 @@
-/// ROS 2 wrapper for OpenFace
+/// ROS 2 wrapper for OpenFace for one face, publishing output as a single topic
 
 ////////////////////
 /// DEPENDENCIES ///
@@ -311,7 +311,7 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
       face.face.head_pose.position.y = head_pose[1] / 1000.0;
       face.face.head_pose.position.z = head_pose[2] / 1000.0;
       tf2::Quaternion head_orientation;
-      head_orientation.setRPY(head_pose[3], head_pose[4] + M_PI, head_pose[5]);
+      head_orientation.setRPY(-head_pose[3], head_pose[4] + M_PI, -head_pose[5]);
       face.face.head_pose.orientation = tf2::toMsg(head_orientation);
 
       if (this->get_parameter("broadcast_tf").get_value<bool>())
@@ -381,10 +381,10 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
         {
           pupil_left += eye_landmarks_3d[i];
         }
-        pupil_left /= 8;
-        face.face.gaze_left.position.x = pupil_left.x / 1000.0;
-        face.face.gaze_left.position.y = pupil_left.y / 1000.0;
-        face.face.gaze_left.position.z = pupil_left.z / 1000.0;
+        pupil_left /= 8000; // Average and conversion to metres
+        face.face.gaze_left.position.x = pupil_left.x;
+        face.face.gaze_left.position.y = pupil_left.y;
+        face.face.gaze_left.position.z = pupil_left.z;
 
         // Right pupil centre (position)
         cv::Point3f pupil_right(0, 0, 0);
@@ -392,23 +392,29 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
         {
           pupil_right += eye_landmarks_3d[i];
         }
-        pupil_right /= 8;
-        face.face.gaze_right.position.x = pupil_right.x / 1000.0;
-        face.face.gaze_right.position.y = pupil_right.y / 1000.0;
-        face.face.gaze_right.position.z = pupil_right.z / 1000.0;
+        pupil_right /= 8000; // Average and conversion to metres
+        face.face.gaze_right.position.x = pupil_right.x;
+        face.face.gaze_right.position.y = pupil_right.y;
+        face.face.gaze_right.position.z = pupil_right.z;
+
+        // Quat for flipping the eye gaze
+        tf2::Quaternion q;
+        q.setRPY(0, M_PI, M_PI);
 
         // Left eye gaze orientation
         cv::Point3f gaze_left(0, 0, -1);
         GazeAnalysis::EstimateGaze(face_landmark_detector_, gaze_left, fx, fy, cx, cy, true);
         tf2::Quaternion gaze_left_orientation;
-        gaze_left_orientation.setRPY(gaze_left.x, gaze_left.y + M_PI, gaze_left.z);
+        gaze_left_orientation.setValue(gaze_left.x, gaze_left.y, gaze_left.z);
+        gaze_left_orientation *= q;
         face.face.gaze_left.orientation = tf2::toMsg(gaze_left_orientation);
 
         // Right eye gaze orientation
         cv::Point3f gaze_right(0, 0, -1);
         GazeAnalysis::EstimateGaze(face_landmark_detector_, gaze_right, fx, fy, cx, cy, false);
         tf2::Quaternion gaze_right_orientation;
-        gaze_right_orientation.setRPY(gaze_right.x, gaze_right.y + M_PI, gaze_right.z);
+        gaze_right_orientation.setValue(gaze_right.x, gaze_right.y, gaze_right.z);
+        gaze_right_orientation *= q;
         face.face.gaze_right.orientation = tf2::toMsg(gaze_right_orientation);
 
         // Compund gaze orientation (average between left and right eye)

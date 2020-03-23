@@ -26,7 +26,7 @@ def generate_launch_description():
             package='openface',
             node_executable='openface',
             node_name='openface',
-            node_namespace="",
+            node_namespace='',
             output='screen',
             parameters=[config_openface],
             remappings=[('camera/image_raw', 'camera/color/image_raw'),
