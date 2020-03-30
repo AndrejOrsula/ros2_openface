@@ -1,8 +1,8 @@
 # Colcon
-**/install/
-**/log/
-**/build/
+**/install
+**/log
+**/build
 
 # VScode
-**.code-workspace
-**.vscode
+**/.code-workspace
+**/.vscode
