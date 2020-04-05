@@ -394,7 +394,7 @@ void Ros2OpenFaceSeparate::image_callback(const sensor_msgs::msg::Image::ConstSh
       msg_head_pose.pose.position.y = head_pose[1] / 1000.0;
       msg_head_pose.pose.position.z = head_pose[2] / 1000.0;
       tf2::Quaternion head_orientation;
-      head_orientation.setRPY(-head_pose[3], head_pose[4] + M_PI, -head_pose[5]);
+      head_orientation.setRPY(-head_pose[3], head_pose[4] + M_PI, head_pose[5]);
       msg_head_pose.pose.orientation = tf2::toMsg(head_orientation);
 
       pub_head_pose_->publish(msg_head_pose);

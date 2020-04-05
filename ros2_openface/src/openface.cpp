@@ -311,7 +311,7 @@ void Ros2OpenFace::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr 
       face.face.head_pose.position.y = head_pose[1] / 1000.0;
       face.face.head_pose.position.z = head_pose[2] / 1000.0;
       tf2::Quaternion head_orientation;
-      head_orientation.setRPY(-head_pose[3], head_pose[4] + M_PI, -head_pose[5]);
+      head_orientation.setRPY(-head_pose[3], head_pose[4] + M_PI, head_pose[5]);
       face.face.head_pose.orientation = tf2::toMsg(head_orientation);
 
       if (this->get_parameter("broadcast_tf").get_value<bool>())
